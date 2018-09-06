@@ -81,10 +81,41 @@ windows 8还进一步提取了TPM中与智能卡相似的功能，并将它们�
 ## TSS.net和TSS.C++
 windows8和TPM2.0规范发布时还没有TPM编程标准。微软为了填补这个空缺开发了TSS.net和TSS。C++这两个开源软件库，程序员可以使用它们开发比CNG和虚拟智能卡更复杂的TPM应用软件。
 
+TSS.net和TSS.C++分别为托管代码和本地代码提供了一层简单的封装。并且它们都支持应用使用TPM设备（通过TBS）或者TPM模拟器（通过TCP/IP连接）。尽管TSS.net和TSS.C++相对来说算是底层软件库，但是它们的开发人员也不断努力让编写TPM应用程序变得简单。比方说下面就是一个通过TPM获取随机书的例子：
+```
+void GetRandomTbs()
+{
+// Create a TpmDevice object and attach it to the TPM. Here you
+// use the Windows TPM Base Services OS interface.
+TpmTbsDevice device;
+if (!device.Connect()) {
+cerr << "Could not connect to the TPM device";
+return;
+}
+// Create a Tpm2 object "on top" of the device.
+Tpm2 tpm(device);
+// Get 20 bytes of random data from
+std::vector<BYTE> rand = tpm.GetRandom(20);
+// Print it out.
+cout << "Random bytes: " << rand << endl;
+return;
+}
 
+```
 
+当然了，所有这些接口比如TBS，都是特别针对windows操作系统开发的。如果你想开发一个跨平台的应用程序，那就最好使用除此之外的软件库。对于TPM1.2来说，当前应用最广泛的软件库是TSS。下一小结我们就将介绍一个通过TSS使用TPM高级功能的应用软件。
 
+## WaveSystem的EmbassySuite
+WaveSystem通过TPM底层软件接口来开发应用软件，而不是类似PKCS#11这样的高层级接口。事实它必须这样做才能有效利用TPM的远程认证功能。因为其他密码协处理器没有远程认证功能，所以可以使用多种硬件设备的标准PKCS#11也没有这样的功能。最终WaveSystem使用TCG-TSS的开源实现TrouSerS来与TPM交互。它可以实现管理TPM所有者的口令，创建认证身份密钥，或者通过一个叫做TrustedNetworkConnect的标准认证一些值并返回给管理服务器。如果管理服务器发现PCR值发生变化时就会通知IT工作人员。有一些PCR（比如PCR0存储了BIOS固件的测量值）是不能改变的，当然BIOS升级的情况除外，所以这些值的变化需要引起管理员的注意。TSS1.2可以在多种操作系统平台上使用，比如windows，linux,solaris,BSD，甚至时MACOS。同样的，TSS2.0也具备这样优秀的跨平台特性，当需要把你的软件移植到其他平台时这是不错的选择。
 
+TSS2.0被做了针对性的设计，从而尽可能地让基于TPM的软件开发容易实现。整个设计是分层实现的，所以可以通过最底层软件直接与TPM交互。通常情况下，使用密码协处理器的软件被设计成非常容易使用，因为它们只提供较高层次的应用编程接口就可以。但是，对于TPM的开发者来说，还是有一些需要特别注意的基本规则。
+
+## 开发TPM应用时需要避免的问题
+当我们开发基于TPM的应用软件时，有两种主要的陷阱主要注意。首先要意识到作为主板的一个独立组建的TPM是有可能坏掉的，或者用户可能会更新他们的设备。而如果主板被更换，那任何被TPM锁定的密钥都将丢失。第二点是，对于被锁定到PCR的数据（使用sealing命令）来说，当被测量的事物发生永久变化时，这些数据也就丢失了。
+
+以上两种问题都说明一点：我们需要认真考虑如何管理密钥和被TPM锁定的数据。一个很好的软件示例是WindowsVista中首次发布的BitLocker。
+
+### 微软的BitLocker
 
 
 
