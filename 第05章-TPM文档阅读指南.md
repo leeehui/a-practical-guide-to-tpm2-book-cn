@@ -170,7 +170,7 @@ Handle和命令参数区域的使用方式不同，handle不会用于计算cpHas
 表5-5
 
 与它相对应的C语言结构如下：
-'''
+```
 typedef struct {
 UINT16 size; /* size in octets of the buffer field;
 may be 0 */
@@ -178,9 +178,36 @@ BYTE buffer[sizeof(TPMT_HA)]; /* the buffer area that contains the
 algorithm ID and
 the digest */
 } TPM2B_DATA;
-'''
+```
 
 #### 包含联合的结构体
+一个联合（Union）通常包含在一个结构体中，在他之前有一个Union选择子。表5-6就是一个例子
+
+表5-6
+
+这个结构体有两个元素：hashAlg，它用于选择digest这个Union中具体的数据。digest前面用中括号括起来的hashAlg也说明了它的功能。在表5-6中，hashAlg就是digest的选择子。
+
+表5-7描述了TPMU_HA这个联合的定义。
+
+表5-7
+
+通常来说，在一个结构体中，当出现[A]B这样的形式时，A就是参数B的选择子。在表5-7中，如果hashAlg被设置成TPM_ALG_SHA1，那这个Union中实际的元素就是sha1[SHA1_DIEST_SIZE]。
+
+表5-6和表5-7生成的C代码如下：
+```
+typedef struct {
+TPMI_ALG_HASH hashAlg;
+TPMU_HA digest;
+} TPMT_HA;
+typedef union {
+BYTE sha1 [SHA1_DIGEST_SIZE]; /* TPM_ALG_SHA1 */
+BYTE sha256 [SHA256_DIGEST_SIZE]; /* TPM_ALG_SHA256 */
+BYTE sm3_256 [SM3_256_DIGEST_SIZE]; /* TPM_ALG_SM3_256 */
+BYTE sha384 [SHA384_DIGEST_SIZE]; /* TPM_ALG_SHA384 */
+BYTE sha512 [SHA512_DIGEST_SIZE]; /* TPM_ALG_SHA512 */
+} TPMU_HA;
+```
+
 #### 数据标准化
 #### 大小端模式
 ### 第2部分：注释语法
