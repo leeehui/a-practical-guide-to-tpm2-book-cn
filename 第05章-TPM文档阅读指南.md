@@ -159,8 +159,27 @@ Handle和命令参数区域的使用方式不同，handle不会用于计算cpHas
 到现在为止我们介绍了命令和命令响应的整体结构，下面我们讨论一下常用的数据类型。
 
 ### 数据结构详解
+如果你正在编写底层的TPM代码，理解这一小节很重要，因为代码大部分的bug将来自这里。当调试TPM2.0底层代码时，你需要理解这一节，从而对进出TPM设备的字节流解码。通用数据结构的构造，字节流的标准化，和大小端是理解这一节的重要数据概念。
+
 #### 通用数据结构组成
+这一小节将介绍一些常用的数据结构。因为我们以后将经常看到这些结构，所以理解它们是很重要的。
+
 ##### 以TPM2B_开始的数据结构
+所有以“TPM2B_”开始的数据结构都是以字节为单位的buffer。每个这样的buffer都由size和array[size]构成。表5-5就是一个典型的结构。
+
+表5-5
+
+与它相对应的C语言结构如下：
+'''
+typedef struct {
+UINT16 size; /* size in octets of the buffer field;
+may be 0 */
+BYTE buffer[sizeof(TPMT_HA)]; /* the buffer area that contains the
+algorithm ID and
+the digest */
+} TPM2B_DATA;
+'''
+
 #### 包含联合的结构体
 #### 数据标准化
 #### 大小端模式
