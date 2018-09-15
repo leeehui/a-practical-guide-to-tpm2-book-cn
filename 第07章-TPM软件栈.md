@@ -32,6 +32,82 @@ TAB这一层主要负责多线程环境下TPM资源的同步。也就是说它�
 接下来分别介绍TSS的每一层内容。
 
 ## Feature API
+TSS的FAPI目标是让用户更容易地使用TPM2.0最常用的功能。因此，FAPI不能使用使用TPM的一些特殊功能。
+
+在设计FAPI时，设计者希望80%的应用程序仅仅使用FAPI这一层就能满足要求，而不用使用其他的TSS API。同时也尽可能让用户较少地调用API函数，以及定义最少的参数。
+
+实现上述构想的一种实现方式就是使用一个配置文件，这个配置文件中定义了用户对算法，密钥大小，加密模式，签名模式等的默认配置；用户在创建密钥的时候就可以使用这些默认的配置。它假设用户希望选择一组互相匹配的密码，用户可以设置是否使用这些默认的配置。有时候用户可能希望选择一个配置文件，当然这也是可以的。但是通常情况下用户总是会选择默认的配置。FAPI在发布的时候总是附带一个预先设置好的配置文件，配置文件总是包含最常用的配置。举例如下：
+* P_RSA2048SHA1这个配置使用RSA2048位的非对称密钥来签名，签名过程遵循PKCS1v1.5规范。哈希算法使用SHA1，对称加密使用AES128的CFB模式。
+* P_RSA2048SHA256这个配置同样使用RSA2048位非对称密钥类签名，签名过程遵循PKCSv1.5规范。哈希算法使用SHA256，对称加密使用AES128的CFB模式
+* P_ECCP256这个配置的签名机制时ECDSA，密钥使用NIST ECC素数域256比特非对称密钥。
+
+配置文件中的路径描述用于FAPI查找，密钥，Policies，NV，和其他的TPM对象和资源实体。路径的基本结构如下：
+<Profile name> / <Hierarchy> / <Object Ancestor> / key tree
+
+如果在使用FAPI时忽略了配置文件名称，那它将使用默认的配置。如果没有设置组织（Hierarchy），那么将使用默认的存储组织架构，存储组织架构叫做H_S，背书组织架构（Endorsement Hierarchy）是H_E，平台组织架构（Platform Hierarchy）是H_P。一个对象的父对象可以是如下的值：
+* SNK：不可迁移密钥的系统父对象。
+* SDK：可迁移密钥的系统父对象。
+* UNK：不可迁移密钥的用户父对象。
+* UDK：可迁移密钥的用户父对象。
+* NV：用于NV的创建。
+* Policy：用于Policy对象。
+
+密钥树就是由一系列用/隔开的父密钥和子密钥组成。注意这个路径是不区分大小写的。
+
+下面我们来看一些示例，假设用户使用P_RSA2048SHA1，所有以下的路径都是相等的：
+* P_RSA2048SHA1/H_S/SNK/myVPNkey
+* H_S/SNK/myVPNkey
+* SNK/myVPNkey
+* P_RSA2048SHA1/H_S/SNK/MYVPNKEY
+* H_S/SNK/MYVPNKEY
+* SNK/MYVPNKEY
+
+一个父对象为用户备份密钥的ECC P-256 NIST 签名密钥可以用如下的路径标识：
+* P_ECCP256/UDK/backupStorageKey/mySigningKey
+
+FAPI还包含一些默认资源实体的名称：
+
+密钥：
+* ASYM_STORAGE_KEY：一个用于存储密钥或者数据的非对称密钥。
+* EK：一个含有证书的背书密钥，它用户证明（或者在一个操作中证明其他的密钥）它属于一个真实的TPM。
+* ASYM_RESTRICTED_SIGNING_KEY：一个类似于TPM1.2中的AIK，但是它可以用于对TPM之外的数据签名。
+* HMAC_KEY：一个不受限制的对称密钥。它的主要用途就是用于HMAC对非TPM产生的哈希做签名。
+
+NV：
+* NV_MEMORY：普通的NV内存。
+* NV_BITFIELD：一个64位的位域。
+* NV_COUNTER：一个64位的计数器。
+* NV_PCR：使用哈希算法模板的NV_PCR。
+* NV_TEMP_READ_DISABLE：在一次启动周期内禁止读操作。
+
+标准的Policy和认证：
+* TSS2_POLICY_NULL：一个永远都不会通过的NULL Policy（空缓冲区）。
+* TSS2_AUTH_NULL：一个空口令。
+* TSS2_POLICY_AUTHVALUE：指向一个对象的授权数据。
+* TSS2_POLICY_SECRET_EH：指向背书组织架构的授权数据。
+* TSS2_POLICY_SECRET_SH：指向存储组织架构的授权数据。
+* TSS2_POLICY_SECRET_PH：指向平台组织架构的授权数据。
+* TSS2_POLICY_SECRET_DA：指向字典攻击handle的授权数据。
+* TSS2_POLICY_SECRET_TRIVIAL：指向一个全0的policy。这个policy很容易通过，因为每一个policy会话都是由全0开始的。它可以用于通过FAPI创建一个很容易满足policy的对象。
+
+所有使用FAPI创建的对象都是用Policy的授权方式。但是这也不意味着不能使用口令授权：例如在TSS2_POLICY_AUTHVALUE时就可以。但是通常情况下是不会使用口令的。如果一定要使用口令，通常是在加盐的HMAC会话中。
+
+TSS2_SIZED_BUFFER是FAPI经常使用的一个数据结构。这个结构包含两个域：一个size和一个指向缓冲区的指针。size代表了缓冲区的大小：
+```
+typedef struct { size_t size;
+uint8_t *buffer;
+} TSS2_SIZED_BUFFER;
+```
+
+在开始写程序之前你还需要知道一件事：在程序的开始，你必须首先创建一个context，使用完以后要销毁它。
+
+下面让我们使用FAPI来编写一个创建密钥的示例程序。然后用这个密钥来签名“Hello World”，之后还要验证签名。我们安装以下步骤来做：
+* 创建一个Context，告诉这个context使用本地的TPM，也就是设置第二个参数为NULL：
+```
+TSS2_CONTEXT *context;
+Tss2_Context_Intialize(&context, NULL);
+```
+* 使用用户的默认配置创建一个签名密钥。这里我们使用P_RSA2048SHA1这个配置而不是默认的。参数UNK说明这个密钥是不可复制的。名称是mySigningKEy。
 ## System API
 ### 命令上下文申请函数
 ### 命令准备函数
