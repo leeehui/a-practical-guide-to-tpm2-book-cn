@@ -107,7 +107,104 @@ uint8_t *buffer;
 TSS2_CONTEXT *context;
 Tss2_Context_Intialize(&context, NULL);
 ```
-* 使用用户的默认配置创建一个签名密钥。这里我们使用P_RSA2048SHA1这个配置而不是默认的。参数UNK说明这个密钥是不可复制的。名称是mySigningKEy。
+* 使用用户的默认配置创建一个签名密钥。这里我们使用P_RSA2048SHA1这个配置而不是默认的。参数UNK说明这个密钥是不可复制的。名称是mySigningKEy。ASYM_RESTRICTED_SIGNING_KEY这个参数表明这个密钥是一个签名密钥。同时我们还使用一个非常容易验证通过的Policy和一个空的口令。
+```
+Tss2_Key_Create(context, // pass in the context I just created
+"P_RSA2048SHA1/UNK/mySigningKey", // non-duplicableRSA2048
+ASYM_RESTRICTED_SIGNING_KEY, // signing key
+TSS2_POLICY_TRIVIAL, // trivially policy
+TSS2_AUTH_NULL); // the password is NULL
+```
+* 使用密钥对“Hello World”签名时，首先要使用OpenSSL软件库来对它做哈希。
+```
+TSS2_SIZED_BUFFER myHash;
+myHash.size=20
+myHash.buffer=calloc(20,1);
+SHA1("Hello World",sizeof("Hello World"),myHash.buffer);
+```
+* 签名命令将会返回所有用于验签的信息。因为密钥是刚刚创建的，所以密钥的证书是空的。
+```
+TSS2_SIZED_BUFFER signature, publicKey,certificate;
+Tss2_Key_Sign(context, // pass in the context
+"P_RSA2048SHA1/UNK/mySigningKey", // the signing key
+&myHash,
+&signature,
+&publicKey,
+&certificate);
+```
+* 通常情况下我们应该保存签名的结果，但是我们在这个示例中直接做验证签名的操作。
+```
+if (TSS_SUCCESS!=Tss2_Key_Verify(context ,&signature,
+&publicKey,&myHash) )
+{
+printf("The command failed signature verification\n");
+}
+else printf("The command succeeded\n");
+```
+* 销毁之前申请的缓冲区，示例程序就算完成了。
+```
+free(myHash.buffer);
+free(signature.buffer);
+free(publicKey.buffer);
+/* I don’t have to free the certificate buffer, because
+it was empty */
+Tss2_Context_Finalize(context);
+```
+
+我们很容易看出来这个示例有点太简单了。具体来说就是，密钥在创建时不需要任何认证。接下来我们将介绍如果密钥需要认证时，应该怎么做。
+
+所有的FAPI函数都假设密钥仅仅使用Policy做认证。如果密钥需要口令来认证，那么密钥将被设置一个口令，同时还会使用TPM2_PolicyAuthValue命令创建一个Policy。默认配置中的TSS2_POLICY_AUTHVALUE就是这样做的。但是，如何满足这个Policy是一个大问题。
+
+Policy相关的命令有两类。一类是需要和TPM外部通信的命令：
+* PolicyPassword：要求输入口令。
+* PolicyAuthValue：要求输入口令。
+* PolicySecret：需要输入口令。
+* PolicyNV：需要输入口令。
+* PolicyOR：需要在可选列表中做一个选择。
+* PolicyAuthorize：需要选择一个授权过的选项。
+* PolicySigned：需要一个来自某个设备的签名。
+
+另外一种是需要和TPM外部打交道的命令：
+* PolicyPCR：命令会检查TPM内部的PCR值。
+* PolicyLocality：检查命令对应的Locality。
+* PolicyCounterTimer：检查TPM内部的计数器。
+* PolicyCommandCode：检查是什么命令。
+* PolicyCpHash：检查命令和命令相关的参数。
+* PolicyNameHash：检查送往TPM内部的对象的名称。
+* PolicyDuplicationSelect：检查密钥被复制的目的位置。
+* PolicyNVWritten：检查一个NV索引有没有被写过。
+
+许多Policy需要以上两类命令配合使用。如果一个Policy需要上述第二种授权方式，FAPI会负责处理。如果是第一种授权，那用户就需要向FAPI提供相应的参数。
+
+用户向FAPI提供参数是通过回调机制来实现的。你必须首先在程序中注册这些回调函数，这样以来FAPI就是知道要求口令，选择，或者签名时应该调用什么样的函数来和用户交互。一种有三种类型的回调函数，定义如下：
+* TSS2_PolicyAuthCallback：用于需要输入口令的情况。
+* TSS2_PolicyBranchSelectionCallback：用于用户在执行PolicyOR或者TPM_PolicyAuthorize命令时选择其中一个Policy。
+* TSS2_PolicySignatureCallback：用于当一个Policy需要用户输入一个签名的情况。
+
+上述的第一个回调是最简单的。当注册Context之后，就需要创建一个回调函数，当FAPI需要要求用户输入密码时就会调用该函数。FAPI会通过回调函数向程序提供需要授权的对象的描述，然后申请输入授权数据。FAPI还负责对授权数据做加盐和HMAC操作。用户需要做两件事情：一是创建一个要求用户输入口令得函数，然后注册它，这样FAPI就可以调用了。
+
+如下是一个简单的口令处理函数：
+```
+myPasswordHandler (TSS2_CONTEXT context,
+void *userData,
+char const *description,
+TSS2_SIZED_BUFFER *auth)
+{
+/* Here the program asks for the password in some application specific
+way. It then puts the result into the auth variable. */
+return;
+}
+```
+
+下面这个函数用于向FAPI注册你的回调函数：
+```
+Tss2_SetPolicyAuthCallback(context, TSS2_PolicyAuthCallback, NULL);
+```
+
+对于其他类型的回调函数来说，其创建和注册过程是类似的。
+
+在写这本书的时候， 使用XML来为命令创建Policy的规范还没有开始写，不过很可有可能在2014年发布这样的规范。有一件事情可以确认：硬件的OEM厂商可以提供一个包含有自己回调函数的软件库。这时候，回调函数会在Policy中注册而不是在程序中，因此开发者就不用重新再写了。同样的，Policy允许使用这样的软件库来注册这些回调函数。这种情况下就不需要再注册任何回调函数了。
+
 ## System API
 ### 命令上下文申请函数
 ### 命令准备函数
