@@ -220,6 +220,60 @@ SAPI提供了四组命令：TPM命令上下文的申请，命令准备，命令�
 首先我们会概括性地介绍每一组命令。介绍这些命令时，我们会列出TPM2_GetTestResult示例的代码片段。最后我们将这些代码片段组合起来，并使用三种方法来执行TPM2_GetTestResult这个命令：单独的一次调用，异步调用，同步的多次调用。SAPI函数的代码示例要求了解会话，授权，加解密等概念，但是这些概念都推后到第13和17章中介绍。只有当你真正理解了这些TPM功能之后，SAPI的这些函数才有意义。这一章的最后会简单介绍一下SAPI代码中附带的测试程序。
 
 ### 命令上下文申请函数
+下面要介绍的函数用于申请SAPI命令上下文数据结构的内存空间。这些难懂的数据结构用于维护TPM2.0命令执行时的状态数据。
+
+Tss2_Sys_GetContextSize这个函数用于决定SAPI上下文数据结构需要多少内存空间。这个命令会返回内存空间的大小能够满足执行任何TPM2.0规范第三部分中描述的命令。或者调用者也可以提供最大的命令和响应大小，这个函数会计算所需的上下文大小。
+
+Tss2_Sys_Initialize用于初始化SAPI的上下文。它需要如下四个参数：一个指向足够用于上下文的内存区域的指针；Tss2_Sys_GetContextSize返回的上下文大小；指向TCTI上下文的指针，这个上下文定义了发送命令和接收命令响应的方法；最后还有SAPI版本信息。
+```
+注：以下代码中的一个提示：rval是 return value的缩写，它是一个无符号的32位整数。后续的代码示例将重复使用rval。
+```
+如下是一个创建和初始化系统上下文结构的代码示例。
+```
+函数要求返回一个TSS2_SYS_CONTEXT的指针。这个结构体的定义如下：
+typedef struct _TSS2_SYS_OPAQUE_CONTEXT_BLOB TSS2_SYS_CONTEXT;
+
+```
+
+```
+//
+// Allocates space for and initializes system
+// context structure.
+//
+// Returns:
+// ptr to system context, if successful
+// NULL pointer, if not successful.
+//
+TSS2_SYS_CONTEXT *InitSysContext(
+UINT16 maxCommandSize,
+TSS2_TCTI_CONTEXT *tctiContext,
+TSS2_ABI_VERSION *abiVersion
+)
+UINT32 contextSize;
+TSS2_RC rval;
+TSS2_SYS_CONTEXT *sysContext;
+// Get the size needed for system context structure.
+contextSize = Tss2_Sys_GetContextSize( maxCommandSize );
+// Allocate the space for the system context structure.
+sysContext = malloc( contextSize );
+if( sysContext != 0 )
+{
+// Initialize the system context structure.
+rval = Tss2_Sys_Initialize( sysContext,
+contextSize, tctiContext, abiVersion );
+if( rval == TSS2_RC_SUCCESS )
+return sysContext;
+else
+return 0;
+}
+else
+{
+return 0;
+}
+}
+```
+
+
 ### 命令准备函数
 ### 命令执行函数
 ### 命令完成函数
