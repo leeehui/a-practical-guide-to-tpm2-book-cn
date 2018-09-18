@@ -228,12 +228,15 @@ Tss2_Sys_Initialize用于初始化SAPI的上下文。它需要如下四个参数
 ```
 注：以下代码中的一个提示：rval是 return value的缩写，它是一个无符号的32位整数。后续的代码示例将重复使用rval。
 ```
+
 如下是一个创建和初始化系统上下文结构的代码示例。
+
 ```
 函数要求返回一个TSS2_SYS_CONTEXT的指针。这个结构体的定义如下：
 typedef struct _TSS2_SYS_OPAQUE_CONTEXT_BLOB TSS2_SYS_CONTEXT;
-
+但是这个数据结构并没有并定义。这样仍然可以工作的原因是TSS2_SYS_CONTEXT这个结构总是通过指针来使用。 使用这种结构体指针的方式相对于void指针有一个好处，那就是在编译时做类型检查。
 ```
+
 
 ```
 //
@@ -273,7 +276,20 @@ return 0;
 }
 ```
 
+这一组中最后一个函数是Tss2_Sys_Finalize，它用于在释放SAPI上下文数据结构之前清理这些数据。如下是一个使用案例：
+```
+void TeardownSysContext( TSS2_SYS_CONTEXT *sysContext )
+{
+if( sysContext != 0 )
+{
+Tss2_Sys_Finalize(sysContext);
+free(sysContext);
+}
+}
+```
 
+```
+```
 ### 命令准备函数
 ### 命令执行函数
 ### 命令完成函数
