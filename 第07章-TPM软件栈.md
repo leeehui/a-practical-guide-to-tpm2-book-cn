@@ -324,11 +324,104 @@ Tss2_Sys_ExecuteFinish是与ExecuteAsync配套的函数。它会调用TCTI函数
 ```
 rval = Tss2_Sys_ExecuteFinish( sysContext, 20 );
 ```
+Tss2_Sys_Execute是与Tss2_Sys_ExecuteAsync功能相同的异步方法。在这个函数调用之后就是 Tss2_Sys_ExecuteFinish，它同样是同步的方法，所以相当于无限大的timeout。如下是一个调用示例：
+```
+rval = Tss2_Sys_Execute( sysContext );
+```
+
+这一组中的最后一个函数是 Tss2_Sys_XXXX，他就是针对不同命令的一次调用完成所有任务的函数。这个函数假设对应的操作不需要授权，或者仅仅需要一个简单的口令授权，又或者是HMAC和Policy授权已经计算完成。同样地，规范第三部分中的每个命令对应一个函数。比如说，Tpm2_StartAuthSession这个命令对应的一次性调用函数就是Tss2_Sys_StartAuthSession。这个函数和Tss2_Sys_XXXX_Prepare配合使用就可以完成各种类型的授权。但是这样做的一个有意思的副作用就是命令的参数将会被标准化两次：一次在Tss2_Sys_XXXX_Prepare调用，一次是在一次性的执行函数调用中。这种设计上的妥协是因为一次性的函数需要包含Tss2_Sys_XXXX_Prepare 所具备的功能。下面是一个不需要授权的命令的一次性调用执行示例：
+```
+rval = Tss2_Sys_GetTestResult( sysContext, 0, &outData, &testResult, 0 );
+```
+
+```
+注： 这个函数需要以下参数：一个系统上下文结构体指针，一个命令授权信息的指针；两个输出参数，outData和testResult；还有一个命令响应授权数据结构的指针。示例中参数为0的就是命令和命令响应授权数据的指针。对于这个简单的示例而言，授权数据是不需要的，所以传递了空指针。第13章还会介绍它的使用。
+```
 
 ### 命令完成函数
+这一组函数用于TPM命令的后处理。这些后处理包括命令响应的HMAC计算，以及在加密会话中命令响应参数的解密。
+
+Tss2_Sys_GetRpBuffer需要一个指向命令响应参数数据的指针，以及参数数据的大小作为参数。知道这两个参数后，用户就可以计算命令响应的HMAC，然后与命令响应授权区域的HMAC比较。
+
+Tss2_Sys_GetRspAuths用于获取命令响应授权区的数据。比如上面刚刚提到的HMAC。
+
+完成响应数据的验证后，如果命令响应是通过加密会话传输的，就可以进一步通过Tss2_Sys_GetEncryptParam和Tss2_Sys_SetEncryptParam解密响应参数，并将它们插入到响应的数据流中，后续的反标准化（unmarshalling）操作会将它们解析成对应的数据结构。在后面的第17章加解密会话中会详细地介绍这两个函数。
+
+响应参数被解密后，数据流就可以被反标准化了。这个操作使用Tss2_Sys_XXXX_Complete。因为不同的命令有不同的响应参数，所有规范第三部分中的每个命令也对应一个函数。示例如下:
+```
+rval = Tss2_Sys_GetTestResult_Complete( sysContext, &outData, &testResult );
+```
+
+现在为止，所有的SAPI函数就介绍完了。总结下来就是，其中有一些是针对不同TPM命令的，有一些则是通用的。
+
 ### 简单的代码示例
+下面要介绍的是SAPI代码库中的测试代码，它用三种方式完成TPM2_GetTestResult的调用：一次性调用，同步调用，异步调用。
+
+代码的注释很好的说明了三种调用：
+```
+注： CheckPassed()是一个用于检查输入参数，也就是上一次调用的返回值，否是0的函数。如果返回值不是0，说明有错误，这个函数会打印错误信息，清理程序相关数据并退出。
+```
+
+```
+void TestGetTestResult()
+{
+UINT32 rval;
+TPM2B_MAX_BUFFER outData;
+TPM_RC testResult;
+TSS2_SYS_CONTEXT *systemContext;
+printf( "\nGET TEST RESULT TESTS:\n" );
+// Initialize the system context structure.
+systemContext = InitSysContext( 2000, resMgrTctiContext, &abiVersion );
+if( systemContext == 0 )
+{
+Handle failure, cleanup, and exit.
+InitSysContextFailure();
+}
+test the one-call apI.
+//
+// First test the one-call interface.
+//
+rval = Tss2_Sys_GetTestResult( systemContext, 0, &outData, &testResult,
+0 );
+CheckPassed(rval);
+test the synchronous, multi-call apIs.
+//
+// Now test the synchronous, non-one-call APIs.
+//
+rval = Tss2_Sys_GetTestResult_Prepare( systemContext );
+CheckPassed(rval);
+// Execute the command synchronously.
+rval = Tss2_Sys_Execute( systemContext );
+CheckPassed(rval);
+// Get the command results
+rval = Tss2_Sys_GetTestResult_Complete( systemContext, &outData,
+&testResult );
+CheckPassed(rval);
+test the asynchronous, multi-call apIs.
+//
+// Now test the asynchronous, non-one-call interface.
+//
+rval = Tss2_Sys_GetTestResult_Prepare( systemContext );
+CheckPassed(rval);Chapter 7 ■ tpM Software StaCk
+93
+// Execute the command asynchronously.
+rval = Tss2_Sys_ExecuteAsync( systemContext );
+CheckPassed(rval);
+// Get the command response. Wait a maximum of 20ms
+// for response.
+rval = Tss2_Sys_ExecuteFinish( systemContext, 20 );
+CheckPassed(rval);
+// Get the command results
+rval = Tss2_Sys_GetTestResult_Complete( systemContext, &outData,
+&testResult );
+CheckPassed(rval);
+// Tear down the system context.
+TeardownSysContext( systemContext );
+}
+```
+
 ### SAPI测试代码
-前面出现的GetTestResult作为一个测试被包含在SAPI测试代码中。
+前面出现的GetTestResult作为一个测试被包含在SAPI测试代码中。这一小节简单介绍一下测试代码的结构和特点。
 
 ## TCTI
 ## TPM访问代理（TPM Access Broker）
