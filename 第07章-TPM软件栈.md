@@ -289,9 +289,42 @@ free(sysContext);
 ```
 
 ```
+注：在这个示例中，Tss2_Sys_Finalize是一个不做任何操作的函数，因为SAPI代码不需要它做任何事情。系统上下文的内存在Finalize命令执行以后被释放。
 ```
+
 ### 命令准备函数
+第13，17章会介绍到，HMAC计算，命令参数加密，命令响应参数解密等操作是经常在命令执行前后需要做的事情。命令准备函数用于命令数据在发送到TPM设备之前需要做的操作。
+
+为了计算命令的HMAC和加密命令执行参数，命令的参数必须首先被标准化。这个操作本来可以用额外的代码来实现，但是既然SAPI中已经包含了这个功能，SPI的设计者就决定把相关的函数提供给用户使用。这也就是Tss2_Sys_XXXX_Prepare这一系列函数的由来。因为规范第三部分中不同命令的参数各不相同，所以每一个命令都有一个类似的函数。“XXXX”就代表命令的名字。比如说，针对命令TPM2_StartAuthSession的Tss2_Sys_XXXX_Prepare函数就是Tss2_Sys_StartAuthSession_Prepare。以下是为TPM2_GetTestResult做准备的函数调用示例：
+```
+rval = Tss2_Sys_GetTestResult_Prepare( sysContext );
+```
+
+```
+注：这个示例中唯一需要输入的参数就是系统上下文的指针，因为TPM2_GetTestResult这个命令不需要输入参数。
+```
+
+在调用Tss2_Sys_XXXX_Prepare函数之后，命令数据就被标准化了。为了得到标准化的数据流，还需要调用Tss2_Sys_GetCpParam。这个函数会返回cpBuffer的初始位置，标准化的命令参数字节流，以及cpBuffer的长度。具体的使用方式将在第13，17章中介绍。
+
+计算命令的HMAC还需要另外一个函数Tss2_Sys_GetCommandCode。这个函数会以CPU大小端的方式返回命令代码。在命令的后处理时也会用到这个函数。
+
+Tss2_Sys_GetDecryptParam和Tss2_Sys_SetDecryptParam用于解密会话，17章会详细介绍。现在我们需要知道的是，Tss2_Sys_GetDecryptParam会返回一个指向被加密数据其实位置的指针和参数的大小。这两个值将被用于Tss2_Sys_SetDecryptParam函数，这个函数用于向命令数据流中添加加密参数。
+
+Tss2_Sys_SetCmdAuths函数用于设置命令的授权区域（也叫做授权会话），这将在第13章讨论会话和授权时详细介绍。
+
 ### 命令执行函数
+这一组函数用于向TPM发送命令和从TPM接收命令响应数据。命令可以被以同步或者异步的方式发送。同步发送又分为两种：3-5个函数调用；或者是完成所有事情的一次调用。支持同步，异步和单次，多次调用主要是为了支持尽可能多的应用架构。
+
+Tss2_Sys_ExecuteAsync是发送命令的最基础方法。它使用TCTI发送函数来发送命令，并尽快返回。如下是一个示例：
+```
+rval = Tss2_Sys_ExecuteAsync( sysContext );
+```
+
+Tss2_Sys_ExecuteFinish是与ExecuteAsync配套的函数。它会调用TCTI函数来接收命令响应数据。这个函数有一个timeout参数用于决定要命令响应的超时时间。下面是一个响应超时设置为20ms的例子：
+```
+rval = Tss2_Sys_ExecuteFinish( sysContext, 20 );
+```
+
 ### 命令完成函数
 ### 简单的代码示例
 ### SAPI测试代码
