@@ -432,6 +432,9 @@ SAPI测试代码的主要设计原则是使用TPM设备本身来做密码学运�
 SAPI的测试代码还使用了TSS软件栈的其他部分来做测试：TCTI，TAB，和RM。因为SAPI使用TCTI向TAB发送命令，所以接下来首先介绍一下TCTI。
 
 ## TCTI
+尽管我们已经介绍了SAPI的函数，但是仍需要解决的疑问是，命令的数据流究竟是怎样被发送到TPM设备的，应用程序又是如何从TPM设备接收命令响应数据的。答案就是TPM命令传输接口（TCTI）。在Tss2_Sys_Initialize的介绍中简单提到过这个问题。Tss2_Sys_Initialize接收一个TCTI上下文结构体作为它的第一个参数。现在我们将详细介绍TCTI。
+
+TCTI上下文结构体用于指示SAPI函数如何与TPM设备通信。
 ## TPM访问代理（TPM Access Broker）
 ## 资源管理器
 ## 设备驱动
