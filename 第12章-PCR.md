@@ -1,0 +1,11 @@
+# PCR
+## PCR的值
+### PCR的数量
+### PCR命令
+### PCR用于授权
+## PCR用于认证
+### PCR引用详解
+### PCR属性
+### PCR授权和policy
+### PCR算法
+## 总结
