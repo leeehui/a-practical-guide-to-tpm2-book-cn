@@ -137,6 +137,16 @@ df2ad0965c21853874a23189f5cd76f015e348f4 /usr/lib64/libselinux.so.1
 杀毒软件Kaspersky的用户协议（End User License Agreement）允许软件报告处理过的软件，软件的版本以及其他信息。这个协议允许使用TPM来认证这个报告，当然是平台有TPM设备的情况下。
 
 ### PCR引用详解
+详细地检查引用数据是很有意思的。通过这些数据，用户可以明白引用（Quote）操作的安全属性。一个引用的数据结构（数据结构是指被做哈希和签名的结构）包含以下内容：
+* Magic Number TPM_GENERATED：这可以阻止攻击者使用限制性的签名密钥签名任意数据，然后生成这是一个TPM引用操作。参考第10章了解关于限制性签名密钥和TPM_GENERATED相关的交互。
+* Qualified name of the signing key(签名密钥的Qualified名称)：一个强度很高的密钥可以被一个使用相对较弱的算法的父密钥保护。Qualified名称代表了密钥的整个祖先（ancestry）。
+* Extra data provided by the caller：这个数据通常是一个用于防止重放攻击的nonce，这个nonce用于证明这个引用操作只适用于现在这一次操作。
+* TPM firmware version：包含这个数据以后，调用者就可以自行决定是否信任某一个版本的TPM固件。
+* TPM clock state：resetCount对于下一个应用案例是很重要的。基于隐私保护的考虑，时钟信息被非背书组织架构下的密钥签名时会被做混淆处理。这不是漏洞，因为认证申请者只想要知道resetCount是否已经改变，而不需要读具体的值。
+* 认证数据结构的类型（在这个案例中是Quote）。
+* Quote操作中使用的PCR。
+* 这些PCR的哈希值。
+
 ### PCR属性
 ### PCR授权和policy
 ### PCR算法
