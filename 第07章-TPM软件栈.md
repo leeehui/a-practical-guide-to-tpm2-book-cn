@@ -176,7 +176,7 @@ Policy相关的命令有两类。一类是需要和TPM外部通信的命令：
 
 许多Policy需要以上两类命令配合使用。如果一个Policy需要上述第二种授权方式，FAPI会负责处理。如果是第一种授权，那用户就需要向FAPI提供相应的参数。
 
-用户向FAPI提供参数是通过回调机制来实现的。你必须首先在程序中注册这些回调函数，这样以来FAPI就是知道要求口令，选择，或者签名时应该调用什么样的函数来和用户交互。一种有三种类型的回调函数，定义如下：
+用户向FAPI提供参数是通过回调机制来实现的。你必须首先在程序中注册这些回调函数，这样一来FAPI就是知道要求口令，选择，或者签名时应该调用什么样的函数来和用户交互。一种有三种类型的回调函数，定义如下：
 * TSS2_PolicyAuthCallback：用于需要输入口令的情况。
 * TSS2_PolicyBranchSelectionCallback：用于用户在执行PolicyOR或者TPM_PolicyAuthorize命令时选择其中一个Policy。
 * TSS2_PolicySignatureCallback：用于当一个Policy需要用户输入一个签名的情况。
